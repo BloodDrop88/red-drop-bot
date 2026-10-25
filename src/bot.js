@@ -13,7 +13,11 @@ export function createBot() {
     // t.me/<bot>?start=<token> arrives as "/start <token>".
     privateChats.command('start', async (ctx) => {
         const token = typeof ctx.match === 'string' ? ctx.match.trim() : '';
-        if (!token) return ctx.reply(replies.welcome());
+        if (!token) {
+            // A plain /start (or Telegram's Restart button): greet a connected user, otherwise explain how to connect.
+            const { status, data } = await callBackend('/bot/status', { chatId: String(ctx.chat.id) });
+            return ctx.reply(status === 200 && data.linked ? replies.alreadyLinked(data) : replies.welcome());
+        }
 
         const { status, data } = await callBackend('/bot/link', {
             token,

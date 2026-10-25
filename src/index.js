@@ -1,6 +1,7 @@
 import { env } from './config/env.js';
 import { createBot } from './bot.js';
 import { createServer } from './server.js';
+import { startOutbox } from './outbox.js';
 
 const bot = createBot();
 const server = createServer().listen(env.PORT, () => {
@@ -20,7 +21,12 @@ bot.start({
     onStart: (info) => console.log(`Red Drop bot @${info.username} is polling for messages`),
 });
 
+// Messages the backend wants sent (alerts, rejections). Polling it also keeps the free backend awake.
+const stopOutbox = startOutbox(bot.api);
+console.log('Checking the backend outbox every 3 seconds');
+
 async function shutdown() {
+    stopOutbox();
     await bot.stop();
     server.close();
 }

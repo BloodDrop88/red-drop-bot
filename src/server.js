@@ -1,6 +1,6 @@
 import express from 'express';
 
-// HTTP side of the bot: a health check now, and the backend's /internal/send and /internal/edit in phase E.
+// HTTP side of the bot: a health check. Messages come from the backend outbox (outbox.js), not over HTTP.
 export function createServer() {
     const app = express();
     app.disable('x-powered-by');

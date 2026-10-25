@@ -77,10 +77,24 @@ test('/start when the backend is unreachable', async () => {
     assert.deepEqual(replyTexts(sent), [replies.backendDown()]);
 });
 
-test('plain /start explains how to connect, without calling the backend', async () => {
+test('plain /start explains how to connect when the chat is not linked', async () => {
+    backendAnswers['/bot/status'] = { status: 200, data: { linked: false, firstName: null } };
     const { bot, sent } = makeBot();
     await bot.handleUpdate(message('/start'));
-    assert.equal(backendCalls.length, 0);
+    assert.deepEqual(backendCalls[0].body, { chatId: '4242' });
+    assert.deepEqual(replyTexts(sent), [replies.welcome()]);
+});
+
+test('plain /start greets a chat that is already linked', async () => {
+    backendAnswers['/bot/status'] = { status: 200, data: { linked: true, firstName: 'Sophea' } };
+    const { bot, sent } = makeBot();
+    await bot.handleUpdate(message('/start'));
+    assert.deepEqual(replyTexts(sent), [replies.alreadyLinked({ firstName: 'Sophea' })]);
+});
+
+test('plain /start still explains the bot when the backend is unreachable', async () => {
+    const { bot, sent } = makeBot();
+    await bot.handleUpdate(message('/start'));
     assert.deepEqual(replyTexts(sent), [replies.welcome()]);
 });
 
