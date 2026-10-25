@@ -33,7 +33,7 @@ export async function deliver(api, notification) {
         return report(id, { ok: false, error: `Unknown template ${template}`, retry: false });
     }
 
-    const extra = message.button ? { reply_markup: new InlineKeyboard().url(message.button.text, message.button.url) } : {};
+    const extra = message.buttons.length > 0 ? { reply_markup: toKeyboard(message.buttons) } : {};
     try {
         const sent = await api.sendMessage(chatId, message.text, extra);
         console.log(`sent ${template} notification=${id}`);
@@ -49,6 +49,18 @@ export async function deliver(api, notification) {
             retry: code === null || code === 429 || code >= 500,
         });
     }
+}
+
+function toKeyboard(rows) {
+    const keyboard = new InlineKeyboard();
+    rows.forEach((row, index) => {
+        if (index > 0) keyboard.row();
+        for (const button of row) {
+            if (button.url) keyboard.url(button.text, button.url);
+            else keyboard.text(button.text, button.callbackData);
+        }
+    });
+    return keyboard;
 }
 
 async function report(id, result) {

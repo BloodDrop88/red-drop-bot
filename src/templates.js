@@ -18,11 +18,26 @@ export const replies = {
         'To stop alerts, send /unlink or turn off Available to donate in Red Drop.',
     unlinked: () => 'Disconnected. You will not get Red Drop alerts here any more.',
     notLinked: () => 'This chat is not connected to a Red Drop account.',
+    alreadyHandledBy: ({ name }) => `Already confirmed by ${name}.`,
+    alreadyHandled: () => 'This was already handled.',
+    notAllowed: () => 'You are not allowed to do this.',
+    buttonExpired: () => 'This button is no longer active.',
 };
 
-// Messages the backend queues in its outbox (api.md, Templates). Each returns the text and an optional link button
-// into the website. Placeholders come from the notification's params.
+// Messages the backend queues in its outbox (api.md, Templates). Placeholders come from the notification's params.
+// Each returns the text and its buttons: `link` opens a page of the website, `url` opens any page,
+// and `callbackData` is a tap the bot forwards to the backend (POST /bot/actions).
 const URGENCY_LABEL = { critical: 'Critical', urgent: 'Urgent', normal: 'Blood needed' };
+
+const CLOSED_REASON = {
+    cancelled: 'was cancelled',
+    expired: 'has expired',
+    fulfilled: 'now has all the blood it needs',
+};
+
+function directionsUrl({ lat, lng }) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+}
 
 const notifications = {
     request_alert: (p) => ({
@@ -30,27 +45,68 @@ const notifications = {
             `${URGENCY_LABEL[p.urgency] ?? 'Blood needed'}: ${p.bloodType} needed.\n` +
             `${p.hospital}, ${p.distanceKm} km from you.\n` +
             `${p.units} unit${p.units === 1 ? '' : 's'} needed.`,
-        link: { text: 'View request', path: `/requests/${p.requestId}` },
+        buttons: [[{ text: 'View request', link: `/requests/${p.requestId}` }]],
     }),
     request_rejected: (p) => ({
         text:
             `Your request for ${p.bloodType} at ${p.hospital} was rejected: ${p.reason}\n\n` +
             'You can send a new request with a clearer document.',
-        link: { text: 'Open request', path: `/requests/${p.requestId}` },
+        buttons: [[{ text: 'Open request', link: `/requests/${p.requestId}` }]],
+    }),
+    donor_coming: (p) => ({
+        text: `${p.donorFirstName} (${p.bloodType}) is on the way to ${p.hospital} to donate for your request.`,
+        buttons: [[{ text: 'Open request', link: `/requests/${p.requestId}` }]],
+    }),
+    arrival_details: (p) => ({
+        text:
+            `Thank you for responding. Please go to ${p.hospital}, ${p.address}.\n` +
+            (p.phone ? `Hospital phone: ${p.phone}.\n` : '') +
+            'Bring your ID.',
+        buttons: [
+            [{ text: 'Get directions', url: directionsUrl(p) }],
+            [{ text: 'Open request', link: `/requests/${p.requestId}` }],
+        ],
+    }),
+    confirm_prompt: (p) => ({
+        text: `Did you receive the blood from ${p.donorFirstName} at ${p.hospital}?`,
+        buttons: [
+            [
+                { text: 'Yes, received', callbackData: `recv_yes:${p.responseId}` },
+                { text: 'Not yet', callbackData: `recv_no:${p.responseId}` },
+            ],
+        ],
+    }),
+    thank_you: (p) => ({
+        text: `Thank you, ${p.firstName}. Your donation at ${p.hospital} was confirmed today. You can donate again in 56 days.`,
+        buttons: [],
+    }),
+    request_closed: (p) => ({
+        text:
+            `Update: the request at ${p.hospital} ${CLOSED_REASON[p.reason] ?? 'is closed'}. ` +
+            'There is no need to go. Thank you for responding.',
+        buttons: [],
     }),
 };
 
-// Telegram refuses buttons that point at localhost, so a local website gets no button.
+// Telegram refuses buttons that point at localhost, so a local website gets no website buttons.
 function isPublicUrl(url) {
     const { hostname } = new URL(url);
     return hostname !== 'localhost' && hostname !== '127.0.0.1';
 }
 
-// Returns { text, button } for a queued notification, or null for a template this bot does not know.
+// Returns { text, buttons } for a queued notification, or null for a template this bot does not know.
+// `buttons` is rows of { text, url } or { text, callbackData }, ready for an inline keyboard.
 export function renderNotification(template, params, webAppUrl) {
     const render = notifications[template];
     if (!render) return null;
-    const { text, link } = render(params);
-    const button = link && isPublicUrl(webAppUrl) ? { text: link.text, url: new URL(link.path, webAppUrl).href } : null;
-    return { text, button };
+    const { text, buttons } = render(params);
+    const rows = buttons
+        .map((row) =>
+            row.flatMap((button) => {
+                if (!button.link) return [button];
+                return isPublicUrl(webAppUrl) ? [{ text: button.text, url: new URL(button.link, webAppUrl).href }] : [];
+            }),
+        )
+        .filter((row) => row.length > 0);
+    return { text, buttons: rows };
 }

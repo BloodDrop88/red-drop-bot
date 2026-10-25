@@ -44,13 +44,13 @@ function fakeApi(errorCode) {
 }
 
 test('request_alert text follows bot-guide.md and links to the request', () => {
-    const { text, button } = renderNotification(alert.template, alert.params, 'https://reddrop.example');
+    const { text, buttons } = renderNotification(alert.template, alert.params, 'https://reddrop.example');
     assert.equal(text, 'Critical: O+ needed.\nCalmette Hospital, 1.6 km from you.\n2 units needed.');
-    assert.deepEqual(button, { text: 'View request', url: 'https://reddrop.example/requests/r1' });
+    assert.deepEqual(buttons, [[{ text: 'View request', url: 'https://reddrop.example/requests/r1' }]]);
 });
 
 test('no button when the website is on localhost, because Telegram refuses those links', () => {
-    assert.equal(renderNotification(alert.template, alert.params, 'http://localhost:5173').button, null);
+    assert.deepEqual(renderNotification(alert.template, alert.params, 'http://localhost:5173').buttons, []);
 });
 
 test('a sent message is reported with its Telegram message id', async () => {
@@ -87,4 +87,51 @@ test('request_rejected includes the admin reason', () => {
         'https://reddrop.example',
     );
     assert.match(text, /rejected: The document is not readable\./);
+});
+
+test('confirm_prompt has Yes, received and Not yet, with callback data under 64 bytes', () => {
+    const responseId = '0e2f7c1a-5b9d-4c3e-8f1a-2b3c4d5e6f70';
+    const { text, buttons } = renderNotification(
+        'confirm_prompt',
+        { requestId: 'r1', responseId, donorFirstName: 'Sophea', hospital: 'Calmette Hospital' },
+        'http://localhost:5173',
+    );
+    assert.equal(text, 'Did you receive the blood from Sophea at Calmette Hospital?');
+    assert.deepEqual(buttons, [
+        [
+            { text: 'Yes, received', callbackData: `recv_yes:${responseId}` },
+            { text: 'Not yet', callbackData: `recv_no:${responseId}` },
+        ],
+    ]);
+    for (const button of buttons[0]) assert.ok(Buffer.byteLength(button.callbackData) <= 64);
+});
+
+test('arrival_details gives directions even when the website is local', () => {
+    const { text, buttons } = renderNotification(
+        'arrival_details',
+        { requestId: 'r1', hospital: 'Calmette Hospital', address: '3 Monivong Blvd', phone: '+855 23 426 948', lat: 11.58, lng: 104.918 },
+        'http://localhost:5173',
+    );
+    assert.match(text, /Please go to Calmette Hospital, 3 Monivong Blvd\.\nHospital phone: \+855 23 426 948\.\nBring your ID\./);
+    assert.deepEqual(buttons, [[{ text: 'Get directions', url: 'https://www.google.com/maps/dir/?api=1&destination=11.58,104.918' }]]);
+});
+
+test('request_closed explains each reason', () => {
+    const text = (reason) => renderNotification('request_closed', { hospital: 'Calmette Hospital', reason }, 'https://reddrop.example').text;
+    assert.match(text('cancelled'), /was cancelled\. There is no need to go/);
+    assert.match(text('fulfilled'), /now has all the blood it needs/);
+    assert.match(text('expired'), /has expired/);
+});
+
+test('a confirm_prompt is sent with an inline keyboard of callback buttons', async () => {
+    const api = fakeApi();
+    await deliver(api, {
+        id: 'n2',
+        chatId: '4242',
+        template: 'confirm_prompt',
+        params: { requestId: 'r1', responseId: '0e2f7c1a-5b9d-4c3e-8f1a-2b3c4d5e6f70', donorFirstName: 'Sophea', hospital: 'Calmette Hospital' },
+    });
+    const keyboard = api.sent[0].extra.reply_markup.inline_keyboard;
+    assert.equal(keyboard[0][0].callback_data, 'recv_yes:0e2f7c1a-5b9d-4c3e-8f1a-2b3c4d5e6f70');
+    assert.equal(keyboard[0][1].callback_data, 'recv_no:0e2f7c1a-5b9d-4c3e-8f1a-2b3c4d5e6f70');
 });

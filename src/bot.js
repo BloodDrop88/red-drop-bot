@@ -39,10 +39,45 @@ export function createBot() {
         return ctx.reply(data.unlinked ? replies.unlinked() : replies.notLinked());
     });
 
+    // "Yes, received" and "Not yet" under a confirm_prompt. Callback data is "<action>:<responseId>" (api.md).
+    bot.callbackQuery(/^(recv_yes|recv_no):([0-9a-f-]{36})$/, async (ctx) => {
+        const [, action, entityId] = ctx.match;
+        const { status, data } = await callBackend('/bot/actions', {
+            action,
+            entityId,
+            chatId: String(ctx.chat.id),
+            messageId: ctx.callbackQuery.message?.message_id,
+            telegramUserId: String(ctx.from.id),
+        });
+        console.log(`action ${action} chat=${ctx.chat.id} status=${status}`);
+        const note = actionNote(status, data);
+        // Always answer the tap, or the button keeps spinning (bot-guide.md).
+        await ctx.answerCallbackQuery({ text: note });
+        // Handled, by this tap or an earlier one: show the outcome under the question and remove the buttons.
+        if (status === 200 || status === 409) {
+            const question = ctx.callbackQuery.message?.text ?? '';
+            await ctx.editMessageText(`${question}\n\n${note}`).catch(() => {});
+        }
+    });
+
+    // Buttons from old messages, or anything this bot does not know.
+    bot.on('callback_query:data', (ctx) => ctx.answerCallbackQuery({ text: replies.buttonExpired() }));
+
     // Log the error but keep the bot running.
     bot.catch(({ error, ctx }) => {
         console.error(`Error handling update ${ctx.update.update_id}:`, error.message);
     });
 
     return bot;
+}
+
+// What to tell the person who tapped, from the backend's answer.
+function actionNote(status, data) {
+    if (status === 200) return data.text;
+    if (status === 409) {
+        const handledBy = data?.error?.details?.handledBy;
+        return handledBy ? replies.alreadyHandledBy({ name: handledBy }) : (data?.error?.message ?? replies.alreadyHandled());
+    }
+    if (status === 403) return replies.notAllowed();
+    return replies.backendDown();
 }

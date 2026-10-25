@@ -122,3 +122,60 @@ test('/help works anywhere', async () => {
     await bot.handleUpdate(message('/help', 'group'));
     assert.deepEqual(replyTexts(sent), [replies.help()]);
 });
+
+// A tap on an inline button under one of the bot's messages.
+function buttonTap(data) {
+    return {
+        update_id: 2,
+        callback_query: {
+            id: 'cb1',
+            data,
+            chat_instance: '1',
+            from: { id: 4242, is_bot: false, first_name: 'Dara' },
+            message: { message_id: 7, date: 0, text: 'Did you receive the blood from Sophea at Calmette Hospital?', chat: { id: 4242, type: 'private' } },
+        },
+    };
+}
+const RESPONSE_ID = '0e2f7c1a-5b9d-4c3e-8f1a-2b3c4d5e6f70';
+
+test('Yes, received is forwarded, answered, and the buttons are removed', async () => {
+    backendAnswers['/bot/actions'] = { status: 200, data: { result: 'confirmed', text: 'Thank you. The donation is confirmed.' } };
+    const { bot, sent } = makeBot();
+    await bot.handleUpdate(buttonTap(`recv_yes:${RESPONSE_ID}`));
+
+    assert.deepEqual(
+        { action: backendCalls[0].body.action, entityId: backendCalls[0].body.entityId, chatId: backendCalls[0].body.chatId },
+        { action: 'recv_yes', entityId: RESPONSE_ID, chatId: '4242' },
+    );
+    const answer = sent.find((c) => c.method === 'answerCallbackQuery');
+    assert.equal(answer.payload.text, 'Thank you. The donation is confirmed.');
+    const edit = sent.find((c) => c.method === 'editMessageText');
+    assert.equal(edit.payload.text, 'Did you receive the blood from Sophea at Calmette Hospital?\n\nThank you. The donation is confirmed.');
+    assert.equal(edit.payload.reply_markup, undefined);
+});
+
+test('a second tap after someone else confirmed says who did', async () => {
+    backendAnswers['/bot/actions'] = {
+        status: 409,
+        data: { error: { code: 'INVALID_TRANSITION', message: 'This response is already confirmed.', details: { handledBy: 'Vanna Kim' } } },
+    };
+    const { bot, sent } = makeBot();
+    await bot.handleUpdate(buttonTap(`recv_yes:${RESPONSE_ID}`));
+    assert.equal(sent.find((c) => c.method === 'answerCallbackQuery').payload.text, replies.alreadyHandledBy({ name: 'Vanna Kim' }));
+    assert.ok(sent.some((c) => c.method === 'editMessageText'));
+});
+
+test('a tap by someone who may not confirm keeps the buttons', async () => {
+    backendAnswers['/bot/actions'] = { status: 403, data: { error: { code: 'FORBIDDEN' } } };
+    const { bot, sent } = makeBot();
+    await bot.handleUpdate(buttonTap(`recv_no:${RESPONSE_ID}`));
+    assert.equal(sent.find((c) => c.method === 'answerCallbackQuery').payload.text, replies.notAllowed());
+    assert.equal(sent.some((c) => c.method === 'editMessageText'), false);
+});
+
+test('an unknown button is still answered, so it stops spinning', async () => {
+    const { bot, sent } = makeBot();
+    await bot.handleUpdate(buttonTap('something_old:123'));
+    assert.equal(backendCalls.length, 0);
+    assert.equal(sent.find((c) => c.method === 'answerCallbackQuery').payload.text, replies.buttonExpired());
+});
