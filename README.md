@@ -26,9 +26,10 @@ npm test               # handlers against a fake Telegram and a fake backend
 Only one copy of the bot can poll Telegram at a time. A second copy fails with a 409 conflict, so pause the hosted copy before running it locally.
 
 ## Hosting
-Northflank (free Sandbox, always on) builds the `Dockerfile` and redeploys on every push to `main`. Environment there:
-`TELEGRAM_BOT_TOKEN`, `BACKEND_URL=https://red-drop-backend-o89k.onrender.com/api/v1`, `BOT_SHARED_SECRET` (same as the backend),
-`WEB_APP_URL` (the Cloudflare Pages site), `PORT=4100`, `NODE_ENV=production`. Health check: `GET /health` on port 4100.
+Runs inside the backend's Render service as a fourth process: the backend's build downloads this repo and its
+`scripts/start-all.js` starts the bot with `BACKEND_URL` pointing at the local gateway. `TELEGRAM_BOT_TOKEN`,
+`WEB_APP_URL` and `BOT_SHARED_SECRET` are set on that Render service. Render does not watch this repo, so after pushing
+here, redeploy the backend service on Render. The `Dockerfile` is for a container host later; Render does not use it.
 
 ## Layout
 ```
