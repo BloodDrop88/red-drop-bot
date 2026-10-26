@@ -135,3 +135,12 @@ test('a confirm_prompt is sent with an inline keyboard of callback buttons', asy
     assert.equal(keyboard[0][0].callback_data, 'recv_yes:0e2f7c1a-5b9d-4c3e-8f1a-2b3c4d5e6f70');
     assert.equal(keyboard[0][1].callback_data, 'recv_no:0e2f7c1a-5b9d-4c3e-8f1a-2b3c4d5e6f70');
 });
+
+test('stale_admin and request_expired link to the request', () => {
+    const params = { requestId: 'r9', bloodType: 'O+', hospital: 'Calmette Hospital' };
+    const stale = renderNotification('stale_admin', params, 'https://reddrop.example');
+    assert.match(stale.text, /O\+ request at Calmette Hospital has a donor on the way/);
+    assert.deepEqual(stale.buttons, [[{ text: 'Open in Red Drop', url: 'https://reddrop.example/requests/r9' }]]);
+    const expired = renderNotification('request_expired', params, 'https://reddrop.example');
+    assert.match(expired.text, /has expired and is closed/);
+});

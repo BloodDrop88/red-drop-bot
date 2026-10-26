@@ -80,6 +80,18 @@ const notifications = {
         text: `Thank you, ${p.firstName}. Your donation at ${p.hospital} was confirmed today. You can donate again in 56 days.`,
         buttons: [],
     }),
+    request_expired: (p) => ({
+        text:
+            `Your request for ${p.bloodType} at ${p.hospital} has expired and is closed. ` +
+            'If you still need blood, send a new request.',
+        buttons: [[{ text: 'Open request', link: `/requests/${p.requestId}` }]],
+    }),
+    stale_admin: (p) => ({
+        text:
+            `The ${p.bloodType} request at ${p.hospital} has a donor on the way, but nobody has answered ` +
+            '"Did you receive the blood?" for 24 hours. Confirm the waiting donations or close the request.',
+        buttons: [[{ text: 'Open in Red Drop', link: `/requests/${p.requestId}` }]],
+    }),
     request_closed: (p) => ({
         text:
             `Update: the request at ${p.hospital} ${CLOSED_REASON[p.reason] ?? 'is closed'}. ` +
