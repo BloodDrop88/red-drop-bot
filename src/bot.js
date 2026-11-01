@@ -39,8 +39,9 @@ export function createBot() {
         return ctx.reply(data.unlinked ? replies.unlinked() : replies.notLinked());
     });
 
-    // "Yes, received" and "Not yet" under a confirm_prompt. Callback data is "<action>:<responseId>" (api.md).
-    bot.callbackQuery(/^(recv_yes|recv_no):([0-9a-f-]{36})$/, async (ctx) => {
+    // "Yes, received" and "Not yet" under a confirm_prompt, and the three walk-in outcomes under a walkin_staff.
+    // Callback data is "<action>:<id>" (api.md).
+    bot.callbackQuery(/^(recv_yes|recv_no|walkin_donated|walkin_ineligible|walkin_noshow):([0-9a-f-]{36})$/, async (ctx) => {
         const [, action, entityId] = ctx.match;
         const { status, data } = await callBackend('/bot/actions', {
             action,
@@ -50,7 +51,7 @@ export function createBot() {
             telegramUserId: String(ctx.from.id),
         });
         console.log(`action ${action} chat=${ctx.chat.id} status=${status}`);
-        const note = actionNote(status, data);
+        const note = actionNote(status, data, action);
         // Always answer the tap, or the button keeps spinning (bot-guide.md).
         await ctx.answerCallbackQuery({ text: note });
         // Handled, by this tap or an earlier one: show the outcome under the question and remove the buttons.
@@ -72,11 +73,12 @@ export function createBot() {
 }
 
 // What to tell the person who tapped, from the backend's answer.
-function actionNote(status, data) {
+function actionNote(status, data, action) {
     if (status === 200) return data.text;
     if (status === 409) {
         const handledBy = data?.error?.details?.handledBy;
-        return handledBy ? replies.alreadyHandledBy({ name: handledBy }) : (data?.error?.message ?? replies.alreadyHandled());
+        if (!handledBy) return data?.error?.message ?? replies.alreadyHandled();
+        return action.startsWith('walkin_') ? replies.walkInHandledBy({ name: handledBy }) : replies.alreadyHandledBy({ name: handledBy });
     }
     if (status === 403) return replies.notAllowed();
     return replies.backendDown();

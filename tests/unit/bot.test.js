@@ -179,3 +179,34 @@ test('an unknown button is still answered, so it stops spinning', async () => {
     assert.equal(backendCalls.length, 0);
     assert.equal(sent.find((c) => c.method === 'answerCallbackQuery').payload.text, replies.buttonExpired());
 });
+
+function walkInTap(action) {
+    return {
+        update_id: 2,
+        callback_query: {
+            id: 'cb1',
+            from: { id: 4242, is_bot: false, first_name: 'Dara' },
+            chat_instance: 'x',
+            data: `${action}:11111111-1111-1111-1111-111111111111`,
+            message: { message_id: 5, date: 0, chat: { id: 4242, type: 'private' }, text: 'Walk-in donor at the desk' },
+        },
+    };
+}
+
+test('a walk-in button forwards to the backend and shows the answer', async () => {
+    backendAnswers['/bot/actions'] = { status: 200, data: { result: 'donated', text: 'Recorded: donated.' } };
+    const { bot, sent } = makeBot();
+    await bot.handleUpdate(walkInTap('walkin_donated'));
+    assert.equal(backendCalls[0].body.action, 'walkin_donated');
+    assert.equal(sent.find((c) => c.method === 'answerCallbackQuery').payload.text, 'Recorded: donated.');
+    assert.match(sent.find((c) => c.method === 'editMessageText').payload.text, /Recorded: donated\./);
+});
+
+test('a walk-in button someone else already tapped says who handled it', async () => {
+    backendAnswers['/bot/actions'] = { status: 409, data: { error: { code: 'INVALID_TRANSITION', details: { handledBy: 'Vanna Kim' } } } };
+    const { bot, sent } = makeBot();
+    await bot.handleUpdate(walkInTap('walkin_noshow'));
+    assert.equal(sent.find((c) => c.method === 'answerCallbackQuery').payload.text, 'Already handled by Vanna Kim.');
+    assert.ok(sent.find((c) => c.method === 'editMessageText'));
+});
+

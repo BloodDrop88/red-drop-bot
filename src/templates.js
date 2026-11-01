@@ -19,6 +19,7 @@ export const replies = {
     unlinked: () => 'Disconnected. You will not get Red Drop alerts here any more.',
     notLinked: () => 'This chat is not connected to a Red Drop account.',
     alreadyHandledBy: ({ name }) => `Already confirmed by ${name}.`,
+    walkInHandledBy: ({ name }) => `Already handled by ${name}.`,
     alreadyHandled: () => 'This was already handled.',
     notAllowed: () => 'You are not allowed to do this.',
     buttonExpired: () => 'This button is no longer active.',
@@ -27,6 +28,7 @@ export const replies = {
 // Messages the backend queues in its outbox (api.md, Templates). Placeholders come from the notification's params.
 // Each returns the text and its buttons: `link` opens a page of the website, `url` opens any page,
 // and `callbackData` is a tap the bot forwards to the backend (POST /bot/actions).
+const WALK_IN_OUTCOME_LABEL = { donated: 'donated', ineligible: 'not eligible today', noshow: 'did not come' };
 const URGENCY_LABEL = { critical: 'Critical', urgent: 'Urgent', normal: 'Blood needed' };
 
 const CLOSED_REASON = {
@@ -85,6 +87,45 @@ const notifications = {
             `Your request for ${p.bloodType} at ${p.hospital} has expired and is closed. ` +
             'If you still need blood, send a new request.',
         buttons: [[{ text: 'Open request', link: `/requests/${p.requestId}` }]],
+    }),
+    walkin_staff: (p) => ({
+        text: `Walk-in donor at the desk: ${p.donorName}, ${p.bloodType}, at ${p.bloodBank}. Please confirm the outcome.`,
+        buttons: [
+            [{ text: 'Donated', callbackData: `walkin_donated:${p.walkInId}` }],
+            [{ text: 'Not eligible today', callbackData: `walkin_ineligible:${p.walkInId}` }],
+            [{ text: 'Did not come', callbackData: `walkin_noshow:${p.walkInId}` }],
+        ],
+    }),
+    walkin_staff_handled: (p) => ({
+        text:
+            p.outcome === 'expired'
+                ? `Walk-in donor ${p.donorName}: nobody confirmed the outcome in time, so nothing was counted.`
+                : `Walk-in donor ${p.donorName}: ${WALK_IN_OUTCOME_LABEL[p.outcome]}. Handled by ${p.staffName}.`,
+        buttons: [],
+    }),
+    walkin_ineligible_donor: (p) => ({
+        text: `Staff at ${p.bloodBank} marked you as not eligible today, so nothing was counted. You can ask them why at the desk.`,
+        buttons: [],
+    }),
+    join_request: (p) => ({
+        text: `${p.applicantFirstName} (${p.title}) asked to join ${p.organization}. Please review the request.`,
+        buttons: [[{ text: 'Review request', link: '/profile/organization' }]],
+    }),
+    join_decided: (p) => ({
+        text: p.approved
+            ? `You are now a member of ${p.organization}. Requests you post go to donors right away.`
+            : `Your request to join ${p.organization} was declined.`,
+        buttons: [[{ text: 'Open Red Drop', link: '/profile' }]],
+    }),
+    org_registered: (p) => ({
+        text: `${p.organization} registered on Red Drop and is waiting to be verified.`,
+        buttons: [[{ text: 'Review organization', link: '/admin/orgs' }]],
+    }),
+    org_decided: (p) => ({
+        text: p.approved
+            ? `${p.organization} is verified. You are its admin, and requests you post go to donors right away.`
+            : `The registration of ${p.organization} was declined: ${p.reason} You can register again with a clearer document.`,
+        buttons: [[{ text: 'Open Red Drop', link: '/profile' }]],
     }),
     stale_admin: (p) => ({
         text:

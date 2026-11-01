@@ -144,3 +144,51 @@ test('stale_admin and request_expired link to the request', () => {
     const expired = renderNotification('request_expired', params, 'https://reddrop.example');
     assert.match(expired.text, /has expired and is closed/);
 });
+
+test('organization templates say what was decided', () => {
+    const url = 'https://reddrop.example';
+    const join = renderNotification('join_request', { organization: 'Calmette', applicantFirstName: 'Dara', title: 'Nurse' }, url);
+    assert.match(join.text, /Dara \(Nurse\) asked to join Calmette/);
+    assert.deepEqual(join.buttons, [[{ text: 'Review request', url: `${url}/profile/organization` }]]);
+    assert.match(renderNotification('join_decided', { organization: 'Calmette', approved: true }, url).text, /now a member/);
+    assert.match(renderNotification('join_decided', { organization: 'Calmette', approved: false }, url).text, /was declined/);
+    const registered = renderNotification('org_registered', { organization: 'New Clinic' }, url);
+    assert.deepEqual(registered.buttons, [[{ text: 'Review organization', url: `${url}/admin/orgs` }]]);
+    assert.match(renderNotification('org_decided', { organization: 'New Clinic', approved: true }, url).text, /is verified/);
+    const declined = renderNotification('org_decided', { organization: 'New Clinic', approved: false, reason: 'Unreadable.' }, url);
+    assert.match(declined.text, /declined: Unreadable\./);
+});
+
+test('walk-in templates: staff get three buttons, then a handled message', () => {
+    const url = 'https://reddrop.example';
+    const staff = renderNotification('walkin_staff', { walkInId: 'w1', donorName: 'Sokun Meas', bloodType: 'A+', bloodBank: 'Calmette' }, url);
+    assert.match(staff.text, /Sokun Meas, A\+, at Calmette/);
+    assert.deepEqual(staff.buttons.flat().map((b) => b.callbackData), ['walkin_donated:w1', 'walkin_ineligible:w1', 'walkin_noshow:w1']);
+    const handled = renderNotification('walkin_staff_handled', { donorName: 'Sokun Meas', outcome: 'ineligible', staffName: 'Dara Sok' }, url);
+    assert.equal(handled.text, 'Walk-in donor Sokun Meas: not eligible today. Handled by Dara Sok.');
+    assert.deepEqual(handled.buttons, []);
+    const expired = renderNotification('walkin_staff_handled', { donorName: 'Sokun Meas', outcome: 'expired', staffName: null }, url);
+    assert.match(expired.text, /nothing was counted/);
+    assert.match(renderNotification('walkin_ineligible_donor', { bloodBank: 'Calmette' }, url).text, /not eligible today/);
+});
+
+test('a notification with editMessageId edits that message instead of sending a new one', async () => {
+    const calls = [];
+    const api = {
+        sendMessage: async () => { throw new Error('should not send'); },
+        editMessageText: async (chatId, messageId, text, extra) => {
+            calls.push({ chatId, messageId, text, extra });
+            return { message_id: messageId };
+        },
+    };
+    await deliver(api, {
+        id: 'n9',
+        chatId: '42',
+        template: 'walkin_staff_handled',
+        params: { donorName: 'Sokun Meas', outcome: 'donated', staffName: 'Dara Sok' },
+        editMessageId: 77,
+    });
+    assert.deepEqual(calls, [{ chatId: '42', messageId: 77, text: 'Walk-in donor Sokun Meas: donated. Handled by Dara Sok.', extra: {} }]);
+    assert.deepEqual(reports[0].body, { ok: true, messageId: 77 });
+});
+

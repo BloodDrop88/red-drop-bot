@@ -27,7 +27,7 @@ export function startOutbox(api, { intervalMs = 3000, batchSize = 10 } = {}) {
 }
 
 export async function deliver(api, notification) {
-    const { id, chatId, template, params } = notification;
+    const { id, chatId, template, params, editMessageId } = notification;
     const message = renderNotification(template, params, env.WEB_APP_URL);
     if (!message) {
         return report(id, { ok: false, error: `Unknown template ${template}`, retry: false });
@@ -35,7 +35,10 @@ export async function deliver(api, notification) {
 
     const extra = message.buttons.length > 0 ? { reply_markup: toKeyboard(message.buttons) } : {};
     try {
-        const sent = await api.sendMessage(chatId, message.text, extra);
+        // An edit with no keyboard also removes the buttons from the message.
+        const sent = editMessageId
+            ? await api.editMessageText(chatId, editMessageId, message.text, extra)
+            : await api.sendMessage(chatId, message.text, extra);
         console.log(`sent ${template} notification=${id}`);
         return report(id, { ok: true, messageId: sent.message_id });
     } catch (err) {
