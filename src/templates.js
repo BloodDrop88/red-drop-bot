@@ -127,6 +127,13 @@ const notifications = {
             : `The registration of ${p.organization} was declined: ${p.reason} You can register again with a clearer document.`,
         buttons: [[{ text: 'Open Red Drop', link: '/profile' }]],
     }),
+    role_changed: (p) => ({
+        text:
+            p.role === 'org_admin'
+                ? `You are now an admin of ${p.organization}. You can review its join requests and members.`
+                : `You are now staff at ${p.organization}. Its admins review join requests.`,
+        buttons: [[{ text: 'Open Red Drop', link: '/profile/organization' }]],
+    }),
     stale_admin: (p) => ({
         text:
             `The ${p.bloodType} request at ${p.hospital} has a donor on the way, but nobody has answered ` +
